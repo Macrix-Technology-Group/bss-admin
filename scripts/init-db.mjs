@@ -4,24 +4,24 @@
  * existing database is left exactly as it was. That is what removes the "did anyone remember to run
  * migrations" question from deployment.
  *
- * It retries rather than assuming the database is reachable. Neon suspends an idle free-plan
- * database and takes a second or two to wake, and a container starting before the network is up
- * would otherwise crash-loop through that window and look like a failed deployment.
+ * It retries rather than assuming the database is reachable, so a container that starts before the
+ * network is up waits it out instead of crash-looping.
  *
- * ── Note for anyone who knew the MariaDB version ──
- * The driver speaks HTTP, and one request carries one statement — there is no multipleStatements
- * to switch on. So the file is split on semicolons at the end of a line and sent statement by
- * statement. That works because the schema is deliberately plain DDL: no function bodies, no
- * DO blocks, nothing with an internal semicolon. Keep it that way.
+ * The whole file is sent in one query: node-postgres runs a multi-statement string in a single
+ * call, and `--` comments are handled by the server, so there is no need to split on semicolons.
  */
-/* Next loads .env by itself; a plain node script does not. Missing file is not an error — in a
-   container the values come from the environment rather than a file. */
-import 'dotenv/config';
-
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { neon } from '@neondatabase/serverless';
+import pg from 'pg';
+
+/* Next loads .env itself; a plain node script does not. In a container the values come from the
+   environment, so dotenv is optional — load it if present, ignore it if not. */
+try {
+    await import('dotenv/config');
+} catch {
+    /* no dotenv in this environment — env vars are already set */
+}
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -34,27 +34,24 @@ const ATTEMPTS = 30;
 const GAP_MS = 2000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* Strip comment-only lines before splitting: a `--` comment containing a semicolon would
-   otherwise end a statement in the middle of itself. */
-function statements(text) {
-    return text
-        .split('\n')
-        .filter((line) => !line.trim().startsWith('--'))
-        .join('\n')
-        .split(/;\s*$/m)
-        .map((s) => s.trim())
-        .filter(Boolean);
-}
-
-const sql = neon(process.env.DATABASE_URL);
-const schema = statements(await readFile(join(here, '..', 'db', 'schema.sql'), 'utf8'));
+const schema = await readFile(join(here, '..', 'db', 'schema.sql'), 'utf8');
 
 for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    const client = new pg.Client({
+        /* Strip sslmode so the ssl option decides TLS — Supabase's pooler cert will not chain
+           on its own, so we encrypt without verifying the chain. */
+        connectionString: process.env.DATABASE_URL.replace(/([?&])sslmode=[^&]*/g, '$1').replace(/[?&]+$/, ''),
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 10_000,
+    });
     try {
-        for (const statement of schema) await sql.query(statement);
-        console.log(`Schema is up to date (${schema.length} statements).`);
+        await client.connect();
+        await client.query(schema);
+        await client.end();
+        console.log('Schema is up to date.');
         process.exit(0);
     } catch (err) {
+        await client.end().catch(() => {});
         if (attempt === ATTEMPTS) {
             console.error(`Could not reach the database after ${ATTEMPTS} attempts:`, err.message);
             process.exit(1);

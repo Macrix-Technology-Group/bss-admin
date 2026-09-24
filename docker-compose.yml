@@ -1,13 +1,12 @@
 # One container: the app. `docker compose up -d` is the whole deployment.
 #
-# There is deliberately NO database service here. The database is Neon — managed Postgres, the
-# same one the website writes inquiries into — reached over HTTPS with a connection string. So
-# Compose starts the app and points it at that; it does not own, start, back up or upgrade the
-# database, and `docker compose down -v` cannot destroy the data.
+# There is deliberately NO database service here. The database is Supabase — managed Postgres, the
+# same one the website writes inquiries into — reached over a connection string. So Compose starts
+# the app and points it at that; it does not own, start, back up or upgrade the database, and
+# `docker compose down -v` cannot destroy the data.
 #
-# Because the database is now reached over HTTPS rather than a socket on the local network, this
-# container needs outbound internet access. On a locked-down host that is one firewall rule:
-# outbound 443 to *.neon.tech.
+# The container needs outbound internet access to reach it. On a locked-down host that is one
+# firewall rule: outbound 5432 to aws-*.pooler.supabase.com (the session pooler DATABASE_URL uses).
 
 services:
     app:

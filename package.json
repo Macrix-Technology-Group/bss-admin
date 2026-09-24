@@ -11,16 +11,17 @@
         "db:init": "node scripts/init-db.mjs"
     },
     "dependencies": {
-        "@neondatabase/serverless": "^1.1.0",
         "@tanstack/react-table": "^8.21.3",
         "dotenv": "^18.0.1",
         "next": "16.1.4",
+        "pg": "^8.13.1",
         "react": "19.2.3",
         "react-dom": "19.2.3",
         "sanitize-html": "^2.17.7"
     },
     "devDependencies": {
         "@types/node": "^20",
+        "@types/pg": "^8.11.10",
         "@types/react": "^19",
         "@types/react-dom": "^19",
         "@types/sanitize-html": "^2.16.1",

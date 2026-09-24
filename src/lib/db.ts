@@ -1,29 +1,59 @@
-import { neon } from '@neondatabase/serverless';
+import { Pool } from 'pg';
 import type { Inquiry, InquiryEvent, InquiryMessage } from './inquiry';
 
 export { STATUSES } from './inquiry';
 export type { Inquiry, InquiryStatus, InquiryEvent, InquiryMessage } from './inquiry';
 
-/* The database is Neon — managed Postgres, reached over HTTPS rather than a socket.
+/* The database is Supabase — managed Postgres, reached over a normal connection through Supabase's
+ * pooler. The desk runs as one long-lived container, so a connection pool is the right shape: it
+ * keeps a few connections warm and hands them out per query, rather than opening one each time.
  *
- * That removes the assumption this file used to be built on. There is no pool to keep alive and
- * nothing to leak across dev-server reloads, because each query is an HTTPS request: the
- * globalThis cache the MariaDB pool needed is gone, and so is the failure it guarded against.
- * What replaces it is one client object, created on first use.
- *
- * Lazily, not at import: `next build` evaluates this module without DATABASE_URL in scope, and
- * neon() throws on an empty connection string — eagerly, that fails the build before a single
- * page renders.
+ * The pool is created lazily on first use, not at import: `next build` evaluates this module
+ * without DATABASE_URL in scope, and building the pool eagerly would fail the build before a page
+ * renders. It is cached on globalThis so Next's dev-server reloads reuse one pool instead of
+ * leaking a new one on every edit.
  */
-let client: ReturnType<typeof neon> | null = null;
+type Row = Record<string, unknown>;
+type SqlTag = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<Row[]>;
 
-export function sql() {
-    if (!client) {
+const g = globalThis as unknown as { __pgPool?: Pool };
+
+function pool(): Pool {
+    if (!g.__pgPool) {
         const url = process.env.DATABASE_URL;
         if (!url) throw new Error('DATABASE_URL is not set — copy .env.example to .env');
-        client = neon(url);
+        g.__pgPool = new Pool({
+            /* Strip any sslmode from the URL so the ssl option below is what decides TLS. Supabase's
+               pooler presents a cert Node will not chain to on its own ("self-signed in chain"); the
+               connection is still encrypted, just not chain-verified. */
+            connectionString: url.replace(/([?&])sslmode=[^&]*/g, '$1').replace(/[?&]+$/, ''),
+            /* Small pool — one container, a handful of people. The Supabase free pooler has a
+               modest connection budget, and this stays well inside it. */
+            max: 5,
+            idleTimeoutMillis: 30_000,
+            connectionTimeoutMillis: 10_000,
+            /* The connection is TLS; the pooler presents a valid cert but not always a chain node
+               can verify, so encrypt without failing on the chain. */
+            ssl: { rejectUnauthorized: false },
+        });
     }
-    return client;
+    return g.__pgPool;
+}
+
+/* A tagged-template query that keeps the call sites unchanged: `await sql`SELECT … ${value}`` still
+   parameterises each ${value} as a bound argument ($1, $2, …) and resolves to the rows. This is the
+   same shape the Neon driver exposed, so nothing else in this file had to change. */
+export function sql(): SqlTag {
+    const p = pool();
+    return async (strings, ...values) => {
+        let text = '';
+        strings.forEach((part, i) => {
+            text += part;
+            if (i < values.length) text += `$${i + 1}`;
+        });
+        const res = await p.query(text, values);
+        return res.rows as Row[];
+    };
 }
 
 /* ── Reading the list ──────────────────────────────────────────────────────
