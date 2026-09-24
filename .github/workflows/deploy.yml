@@ -1,16 +1,18 @@
-name: Build and deploy
+name: Build image
 
-# Build the image once, push it to GitHub Container Registry, then tell the server to pull and
-# restart. The server builds nothing — it only runs the image this pipeline produced.
+# Build the app into a container image and push it to GitHub Container Registry.
+#
+# There is deliberately NO deploy job here: the server runs on a private network (10.x) that
+# GitHub's cloud runners cannot reach, so GitHub cannot SSH in to deploy. Instead the server pulls
+# the image itself — see DEPLOYMENT.md. This workflow's only job is to produce the image; a run
+# going green means "a new image is ready to pull".
 on:
     push:
         branches: [main]
-    workflow_dispatch: # a manual "Run workflow" button, for redeploys and rollbacks
+    workflow_dispatch: # manual "Run workflow" button, to rebuild on demand
 
-# One deploy at a time. A newer push cancels an in-flight run so the server always lands on the
-# latest commit rather than whichever race finished last.
 concurrency:
-    group: deploy-main
+    group: build-main
     cancel-in-progress: true
 
 env:
@@ -34,8 +36,8 @@ jobs:
                   username: ${{ github.actor }}
                   password: ${{ secrets.GITHUB_TOKEN }}
 
-            # Two tags: the commit sha (immutable — what the server actually runs, and what a
-            # rollback points back to) and :latest (a convenience pointer to the newest build).
+            # Two tags: the commit sha (immutable — what the server pulls, and what a rollback points
+            # back to) and :latest (a convenience pointer to the newest build).
             - name: Build and push
               uses: docker/build-push-action@v6
               with:
@@ -45,45 +47,7 @@ jobs:
                   tags: |
                       ${{ env.IMAGE_BASE }}:${{ github.sha }}
                       ${{ env.IMAGE_BASE }}:latest
-                  # Layer cache stored in the Actions cache, so unchanged layers (npm ci, the build)
-                  # are reused and most builds finish in well under a minute.
+                  # Layer cache in the Actions cache, so unchanged layers (npm ci, the build) are
+                  # reused and most builds finish in well under a minute.
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
-
-    deploy:
-        needs: build
-        runs-on: ubuntu-latest
-        steps:
-            # Ship the compose file and the deploy script to the server (they are small and change
-            # rarely, but this keeps the server copy in step with the repo).
-            - uses: actions/checkout@v4
-
-            - name: Copy compose and deploy script to the server
-              uses: appleboy/scp-action@v0.1.7
-              with:
-                  host: ${{ secrets.SSH_HOST }}
-                  username: ${{ secrets.SSH_USER }}
-                  key: ${{ secrets.SSH_KEY }}
-                  port: ${{ secrets.SSH_PORT }}
-                  source: 'docker-compose.prod.yml,scripts/server-deploy.sh'
-                  target: ${{ secrets.SERVER_PATH }}
-
-            - name: Pull and restart on the server
-              uses: appleboy/ssh-action@v1.2.0
-              with:
-                  host: ${{ secrets.SSH_HOST }}
-                  username: ${{ secrets.SSH_USER }}
-                  key: ${{ secrets.SSH_KEY }}
-                  port: ${{ secrets.SSH_PORT }}
-                  # Pass the exact image tag and (if the package is private) a read token for the
-                  # server's docker login. GHCR_PAT is optional — leave it unset for a public package.
-                  envs: IMAGE,GHCR_USER,GHCR_TOKEN
-                  script: |
-                      set -e
-                      cd "${{ secrets.SERVER_PATH }}"
-                      chmod +x scripts/server-deploy.sh
-                      bash scripts/server-deploy.sh
-              env:
-                  IMAGE: ${{ env.IMAGE_BASE }}:${{ github.sha }}
-                  GHCR_USER: ${{ github.actor }}
-                  GHCR_TOKEN: ${{ secrets.GHCR_PAT }}
