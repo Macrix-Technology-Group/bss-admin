@@ -1,0 +1,35 @@
+# Production compose — for the SERVER.
+#
+# Unlike docker-compose.yml (which BUILDS the image locally, for development), this one PULLS a
+# prebuilt image from GitHub Container Registry. The CI pipeline builds the image once and pushes
+# it; the server only ever runs it. So the server needs Docker and nothing else — no Node, no build
+# tools, no source checkout.
+#
+# The image tag is passed in by the deploy script (IMAGE=…:<commit-sha>), which is what makes a
+# deploy immutable and a rollback just "point IMAGE at an older sha and run again".
+services:
+    app:
+        image: ${IMAGE:-ghcr.io/macrix-technology-group/bss-admin:latest}
+        restart: unless-stopped
+
+        # Secrets live in a .env file on the server, set up once (see DEPLOYMENT.md). They are never
+        # baked into the image and never travel through CI.
+        env_file:
+            - .env
+
+        ports:
+            # 127.0.0.1 ONLY, never 0.0.0.0. The screen has no login, so the only thing between
+            # customer data and the network is where this port is published. As written it is
+            # reachable only from the server itself; a reverse proxy in front decides who else may
+            # reach it. Publishing on 0.0.0.0 would expose customer names, emails and phone numbers
+            # to every machine that can route here. Do not change without adding a login first.
+            - '127.0.0.1:3100:3100'
+
+        # The app catches a database outage and still serves the page (with a banner), so a 200 on
+        # "/" means the process is up and serving. Generous start period covers schema-init on boot.
+        healthcheck:
+            test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3100/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 40s
