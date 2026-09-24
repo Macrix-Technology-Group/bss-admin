@@ -1,0 +1,1229 @@
+/* BSS LogisQ — inquiry desk.
+ *
+ * Light by default, where the public website is dark: this is a tool people read for minutes at a
+ * time next to Outlook and Excel, and long tables of small text sit easier on a light ground. The
+ * one piece of the marketing brand that carries over is the dark navy rail down the left and the
+ * BSS blue accent — enough that nobody mistakes the two, which matters when one shows customer
+ * data.
+ *
+ * Theming is a palette, not a second stylesheet: every rule reads CSS variables, and light/dark
+ * and the swappable accent only redefine those variables. The class names are exactly those the
+ * components render — restyled here, not renamed.
+ */
+
+:root {
+    /* Neutrals */
+    --bg: #eef1f6;
+    --bg-2: #e7ebf3;
+    --surface: #ffffff;
+    --surface-2: #f7f9fc;
+    --border: #e3e8ef;
+    --border-strong: #d3dae4;
+    --text: #131720;
+    --text-dim: #5a6472;
+
+    /* The rail — dark navy in both themes, so these are not re-themed below. */
+    --rail: #0d0e1a;
+    --rail-2: #141a2c;
+    --rail-text: #cfd6e4;
+    --rail-dim: #7c869c;
+    --rail-line: #232a40;
+
+    --blue: var(--accent);
+    --blue-soft: var(--accent-soft);
+
+    /* One colour per status, used for the pill and nothing else. */
+    --new: #b4530c;
+    --new-bg: #fdefe1;
+    --progress: #1d5fd4;
+    --progress-bg: #e7eefc;
+    --answered: #077a55;
+    --answered-bg: #e3f4ec;
+    --spam: #d13b3a;
+    --spam-bg: #fdecec;
+
+    --th-bg: #f7f9fc;
+    --row-hover: #f4f8fd;
+    --warn-bg: #fdefe1;
+    --warn-border: #f0d3a8;
+    --warn-text: #7c4a06;
+
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+    --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.06), 0 2px 4px rgba(16, 24, 40, 0.04);
+    --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.10);
+    --radius: 14px;
+    --radius-sm: 9px;
+
+    /* How much of the accent tints the page ground, per corner. Light needs little — the accent
+       already reads against white. Dark needs much more, because the accent there is a light hue
+       and a small amount of it over near-black is invisible; these are bumped up in the dark
+       blocks below. */
+    --wash-a: 30%;
+    --wash-b: 18%;
+    /* The flat, whole-page tint — enough that the light ground carries a clearly visible accent
+       wash, matching how present the tint is in dark mode. */
+    --wash-base: 11%;
+
+    color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    color: var(--text);
+    font-family: var(--font-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    /* The page carries a slight wash of whatever accent is selected — top-right and bottom-left,
+       so the tint is felt across the whole surface rather than in one corner. Built from --accent
+       through color-mix so it follows the swatch and the mode automatically: the same rule gives a
+       blue haze on the BSS default, a violet one when violet is picked, and a subtler version of
+       each in dark, because --accent is already the lighter dark-mode value there.
+
+       Kept low (≤16%) and off the surfaces: cards, the table and inputs stay clean --surface, so
+       the tint colours the ground the content sits on, never the content itself. */
+    background:
+        /* Two soft corner glows for depth… */
+        radial-gradient(1200px 500px at 90% -10%,
+            color-mix(in srgb, var(--accent) var(--wash-a), transparent), transparent 62%),
+        radial-gradient(900px 520px at 4% 108%,
+            color-mix(in srgb, var(--accent) var(--wash-b), transparent), transparent 60%),
+        /* …over a flat accent tint across the ENTIRE ground. Mixed into --bg (opaque, not layered
+           with transparency) so the whole page carries the hue evenly, corner to corner, and the
+           glows above only deepen it. Follows the swatch and the mode like everything else. */
+        linear-gradient(color-mix(in srgb, var(--accent) var(--wash-base), var(--bg)),
+                        color-mix(in srgb, var(--accent) var(--wash-base), var(--bg)));
+    background-attachment: fixed;
+    min-height: 100vh;
+}
+
+h1, h2, h3, h4 { font-family: var(--font-heading), var(--font-body), sans-serif; }
+
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 32px 34px 72px;
+}
+
+/* ── Header app-bar ──────────────────────────────────────────────────────
+   A contained bar rather than loose elements on the page: the brand and title sit in a surface
+   card, the controls group at the right, and the whole thing reads as the top of an application. */
+.head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+    padding: 16px 20px;
+    /* A soft accent gradient across the card — a diagonal wash from the surface into an
+       accent-tinted corner, with a faint accent glow top-right for depth. Built from --accent
+       through color-mix so it follows the selected colour and the mode, and kept light enough that
+       the logo and title stay fully legible on top. */
+    background:
+        radial-gradient(600px 200px at 100% 0%,
+            color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+        linear-gradient(120deg,
+            color-mix(in srgb, var(--accent) 12%, var(--surface)) 0%,
+            var(--surface) 58%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.brandLogo {
+    height: 52px;
+    width: auto;
+    display: block;
+}
+
+/* Light is the default: show the dark-blue mark, hide the two-tone one. The dark blocks below
+   flip it. Kept as display none/block rather than opacity so the hidden one takes no space. */
+.brandLogo-dark { display: none; }
+
+/* A hairline between the brand and the page title, so the two read as "this app / this screen"
+   rather than one run-on lockup. */
+.brandDivider {
+    width: 1px;
+    height: 42px;
+    background: var(--border-strong);
+}
+
+.head h1 {
+    font-size: 23px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.02em;
+}
+
+.sub {
+    margin: 3px 0 0;
+    color: var(--text-dim);
+    font-size: 13.5px;
+}
+
+.headRight { display: flex; align-items: center; gap: 12px; }
+
+
+/* The header controls — Export, Colour, Dark — use the SAME segmented style as the status tabs:
+   a bordered container holding rounded-rect segments, with the primary action (Export) filled in
+   the accent like an active tab, and the rest transparent until hovered. One button language
+   across the whole screen. */
+.headTools {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    box-shadow: var(--shadow-sm);
+}
+
+.headTools .themeControls { gap: 6px; }
+
+/* Same shape/size as .tab. */
+.toolBtn,
+.headTools .themeBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 11px 15px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-dim);
+    font: inherit;
+    font-weight: 500;
+    line-height: 1.3;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.12s, color 0.12s;
+}
+
+/* Colour and Dark are the inactive segments — fill on hover, exactly like a status tab. */
+.headTools .themeBtn:hover { background: var(--surface); color: var(--text); }
+
+/* Export is the active/primary segment — filled accent, like the selected tab. */
+.toolBtn {
+    background: var(--blue);
+    color: #fff;
+    box-shadow: 0 2px 8px var(--blue-soft);
+}
+.toolBtn:hover { background: var(--blue); filter: brightness(1.06); color: #fff; }
+
+/* ── Toolbar ── */
+.bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.tabs {
+    gap: 8px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 18px;
+}
+
+/* Search + column controls at the right of the tabs bar. flex:1 makes this group take all the
+   room left after the status tabs, and the search inside it grows to fill that — so the field is
+   as long as the space allows and shrinks with the window, down to a sensible floor before the
+   row wraps. */
+.barRight {
+    flex: 1 1 260px;
+    min-width: 200px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* The whole search field. The wrap IS the box now — border, background, focus ring — so the scope
+   chip can live inside it, in front of a borderless input. Grows to fill the bar. */
+.searchWrap {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--surface-2);
+    transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+}
+
+.searchWrap:focus-within {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px var(--blue-soft);
+    background: var(--surface);
+}
+
+/* The input inside carries no chrome of its own — the wrap provides it. */
+.barRight input[type='search'] {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 3px 0;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 13.5px;
+}
+.barRight input[type='search']::placeholder { color: var(--text-dim); }
+.barRight input[type='search']:focus { outline: none; }
+
+/* The active-column token, sitting inside the box before the text. */
+.scopeChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex: none;
+    padding: 3px 5px 3px 10px;
+    border-radius: 7px;
+    background: var(--blue-soft);
+    color: var(--blue);
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.scopeChip button {
+    display: grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--blue);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+.scopeChip button:hover { background: color-mix(in srgb, var(--blue) 22%, transparent); }
+
+/* ── The "@" column menu ──────────────────────────────────────────────────
+   Minimal: no header, no icon tiles. Each row is a muted "@", the field name, and a light
+   descriptor — clean lines, generous space, a soft neutral hover. */
+.atMenu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 30;
+    min-width: 250px;
+    padding: 5px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+}
+
+.atOption {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    width: 100%;
+    padding: 9px 12px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.atOption:hover { background: var(--surface-2); }
+
+.atAt {
+    color: var(--blue);
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+.atLabel { font-weight: 500; }
+
+.atDesc {
+    margin-left: auto;
+    font-size: 12.5px;
+    color: var(--text-dim);
+}
+
+.tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 11px 15px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    line-height: 1.3;
+    transition: background 0.12s, color 0.12s;
+}
+
+.tab:hover { background: var(--surface-2); color: var(--text); }
+
+.tab[data-on='true'] {
+    background: var(--blue);
+    color: #fff;
+    box-shadow: 0 2px 8px var(--blue-soft);
+}
+
+.tab .n {
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-dim);
+}
+
+.tab[data-on='true'] .n { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+/* ── Buttons ── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 15px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: border-color 0.12s, background 0.12s;
+}
+
+.btn:hover { border-color: var(--blue); color: var(--blue); text-decoration: none; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* The primary action — Save, Send — is the accent filled. */
+.actions .btn:first-child:not(.ghost) {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+    box-shadow: 0 2px 10px var(--blue-soft);
+}
+.actions .btn:first-child:not(.ghost):hover { filter: brightness(1.06); color: #fff; }
+
+.btn.ghost {
+    background: transparent;
+    box-shadow: none;
+    border-color: var(--border-strong);
+    color: var(--text-dim);
+}
+.btn.ghost:hover { color: var(--text); border-color: var(--text-dim); }
+
+/* ── Card + table ── */
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+}
+
+.scroll { overflow-x: auto; }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--th-bg);
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    padding: 0;
+    white-space: nowrap;
+}
+
+.sortBtn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 13px 18px;
+    border: none;
+    background: none;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+}
+
+.sortBtn:hover { color: var(--text); }
+th:not(:has(.sortBtn)) {
+    padding: 13px 18px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.sortArrow { color: var(--blue); font-size: 11px; }
+
+tbody td {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+tbody tr:last-child td { border-bottom: none; }
+tbody tr { transition: background 0.1s; }
+tbody tr:hover { background: var(--row-hover); }
+
+/* The whole row opens the inquiry. */
+.rowClickable { cursor: pointer; }
+/* The currently-open row stays tinted so it is clearly the one expanded below. */
+tbody tr.rowClickable[data-open='true'] { background: var(--blue-soft); }
+
+/* The expanded detail row must not take the hover tint over its whole height. */
+tbody tr.detail:hover { background: transparent; }
+
+/* Search-match highlight. Built from the accent, so it lights up in whatever colour is selected
+   and adapts to light/dark — never the browser's default yellow <mark>. */
+.hl {
+    background: var(--blue-soft);
+    color: var(--blue);
+    border-radius: 3px;
+    padding: 0 1px;
+    font-weight: 600;
+}
+
+/* Empty-value tag — shown wherever a cell has no data. A soft dashed pill reading "Empty", so a
+   gap looks intentional rather than like missing or broken data. */
+.emptySlot {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border: 1px dashed var(--border-strong);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+.who { font-weight: 600; color: var(--text); }
+.muted { color: var(--text-dim); }
+.nowrap { white-space: nowrap; }
+
+/* ── Avatar in the From cell ── */
+.fromCell { display: flex; align-items: center; gap: 12px; }
+
+.avatar {
+    flex: none;
+    display: block;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    overflow: hidden;
+    /* A faint ring so the pale side of a generated avatar still reads as a disc on the surface. */
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Status pill ──
+   A lifecycle badge: a small track of three segments that fills as the inquiry advances
+   (New 1/3 → In progress 2/3 → Answered 3/3), then the label in the status colour. Spam sits
+   outside the pipeline, so it shows a ban icon instead of a track. Every pill is the same width so
+   the column reads as one tidy stack. Each status sets --c, its hue. */
+.pill {
+    --c: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    box-sizing: border-box;
+    min-width: 132px;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-2);
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.pill[data-s='new']         { --c: var(--new); }
+.pill[data-s='in_progress'] { --c: var(--progress); }
+.pill[data-s='answered']    { --c: var(--answered); }
+.pill[data-s='spam']        { --c: var(--spam); }
+
+.pillLabel { color: var(--c); }
+
+/* Lifecycle track. Filled segments take the status hue; the rest stay a faint rail, so the badge
+   shows how far along the inquiry is at a glance. */
+.pillTrack {
+    display: inline-flex;
+    gap: 3px;
+    flex: none;
+}
+.pillSeg {
+    width: 12px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-strong, var(--border));
+}
+.pillSeg[data-on='true'] { background: var(--c); }
+
+/* Spam has no stages, so one solid bar spans the same length as the three segments together
+   (3 × 12px + 2 × 3px gap = 42px) — the badge keeps its shape and the label stays put. */
+.pillSegFull { width: 42px; }
+
+.subject {
+    font-weight: 500;
+    color: var(--text);
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: bottom;
+}
+.subject:hover { color: var(--blue); }
+
+/* ── Per-column filter row ── */
+.colFilter {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+}
+.colFilter:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+
+/* ── Pager ── */
+.pager {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 13px;
+}
+
+/* ── Detail panel ── */
+tr.detail td { padding: 0; background: var(--surface-2); }
+
+.detail-inner {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    align-items: stretch;
+    gap: 24px;
+    padding: 20px 22px;
+    border-top: 2px solid var(--blue);
+}
+
+/* Each column is a flex stack so its action row can be pinned to the bottom, lining the left
+   Reply/Send row up with the right Save/Cancel row on one baseline. The footer is excluded — it
+   is a full-width row, not a column. */
+.detail-inner > div:not(.detailFoot) {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.colActions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: auto;
+    padding-top: 16px;
+}
+
+/* The primary actions — Save, Send, Reply by email — are accent-filled; only Cancel (.ghost)
+   stays outlined. */
+.colActions .btn:not(.ghost) {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+    box-shadow: 0 2px 10px var(--blue-soft);
+}
+.colActions .btn:not(.ghost):hover { filter: brightness(1.06); color: #fff; border-color: var(--blue); }
+.colActions .btn:not(.ghost):disabled { opacity: 0.5; filter: none; }
+
+.detail-inner h4 {
+    margin: 0 0 8px;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+}
+
+.detail-inner h4:not(:first-child) { margin-top: 22px; }
+
+/* Full-width provenance footer across the bottom of the panel — a pale, quiet strip of
+   label/value pairs. */
+.detailFoot {
+    grid-column: 1 / -1;
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--text-dim) 7%, transparent);
+    border: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.dfItem {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+}
+
+.dfLabel {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: color-mix(in srgb, var(--text-dim) 75%, transparent);
+}
+
+.message {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+}
+
+.field { margin-bottom: 14px; }
+
+.field label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+}
+
+.field select,
+.field input,
+.field textarea,
+.reply input,
+.reply textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 9px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+}
+
+.field textarea, .reply textarea { resize: vertical; min-height: 76px; line-height: 1.55; }
+
+.field select:focus,
+.field input:focus,
+.field textarea:focus,
+.reply input:focus,
+.reply textarea:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.sendError { color: var(--new); font-size: 13px; }
+
+/* ── Messages / History switch ─────────────────────────────────────────────
+   Two tabs over one fixed-height body. The body is the same size on both tabs and scrolls its
+   own content, so switching never resizes the panel. */
+/* The message box, with the switch tabs floating in its top-right corner. */
+.switchWrap {
+    position: relative;
+    margin-top: 10px;
+}
+
+.switchTabs {
+    position: absolute;
+    top: 8px;
+    /* Clear of the body's scrollbar (~17px on Windows), so the pill never sits on the track. */
+    right: 20px;
+    z-index: 2;
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface-2);
+}
+
+/* Icon + count only — no label; the tooltip/aria carries the name. */
+.switchTab {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+.switchTab:hover { color: var(--text); }
+.switchTab[data-on='true'] { background: var(--surface); color: var(--blue); box-shadow: var(--shadow-sm); }
+
+.switchCount {
+    display: inline-grid;
+    place-items: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-dim);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.switchTab[data-on='true'] .switchCount { background: var(--blue); color: #fff; }
+
+/* Compact panel: sizes to its content, but never shorter than a couple of lines and never taller
+   than the cap — past which it scrolls. Content sits at the top; the right padding leaves room so
+   a top row never slides under the floating tabs. */
+.switchBody {
+    min-height: 96px;
+    max-height: 240px;
+    overflow-y: auto;
+    /* Always reserve the scrollbar gutter, so content and the floating tabs don't shift when the
+       thread grows past the cap and the scrollbar appears. */
+    scrollbar-gutter: stable;
+    padding: 12px 8px 10px 2px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+}
+
+.switchEmpty { display: grid; place-items: center; min-height: 76px; margin: 0; text-align: center; padding: 0 16px; }
+
+/* ── Conversation thread — chat bubbles ──────────────────────────────────
+   What we sent aligns right, what the customer sent aligns left; no name labels, just the bubble
+   and a small time, like a messaging app. */
+.thread {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.thread li {
+    display: flex;
+    max-width: 78%;
+}
+
+.thread li[data-direction='out'] { align-self: flex-end; justify-content: flex-end; }
+.thread li[data-direction='in'] { align-self: flex-start; }
+
+.bubble {
+    padding: 9px 13px;
+    border-radius: 14px;
+    font-size: 13.5px;
+}
+
+/* Ours — blue, right side, with the corner notched toward the edge. */
+.thread li[data-direction='out'] .bubble {
+    background: var(--progress-bg);
+    color: var(--text);
+    border-bottom-right-radius: 4px;
+}
+/* Theirs — green, left side. */
+.thread li[data-direction='in'] .bubble {
+    background: var(--answered-bg);
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+}
+
+.thread .message { margin: 0; font-size: 13.5px; }
+
+/* A sanitized HTML reply from the customer. Constrain it so a wide signature table or a large
+   image cannot break the bubble, and give the common tags sane spacing. */
+.msgHtml {
+    font-size: 13.5px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+.msgHtml p { margin: 0 0 8px; }
+.msgHtml p:last-child { margin-bottom: 0; }
+.msgHtml a { color: var(--blue); }
+.msgHtml img { max-width: 100%; height: auto; }
+.msgHtml table { max-width: 100%; border-collapse: collapse; }
+.msgHtml blockquote {
+    margin: 8px 0;
+    padding-left: 10px;
+    border-left: 2px solid var(--border-strong);
+    color: var(--text-dim);
+}
+.msgHtml hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+
+.bubbleTime {
+    display: block;
+    margin-top: 4px;
+    font-size: 10.5px;
+    color: var(--text-dim);
+    text-align: right;
+}
+
+.reply {
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+}
+
+/* ── History timeline ──────────────────────────────────────────────────────
+   Each change is a dot with an icon, the action, and its time/actor beneath. A connector line
+   runs down through the dots so it reads as a sequence. */
+.timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tlItem {
+    position: relative;
+    display: flex;
+    gap: 12px;
+    padding-bottom: 12px;
+}
+.tlItem:last-child { padding-bottom: 0; }
+
+/* The connector: a line from this dot down to the next. Not on the last item. */
+.tlItem:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 26px;
+    bottom: -2px;
+    width: 2px;
+    background: var(--border);
+}
+
+.tlDot {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+}
+.tlDot[data-tone='status']   { background: var(--progress-bg); border-color: transparent; color: var(--progress); }
+.tlDot[data-tone='assignee'] { background: var(--blue-soft);   border-color: transparent; color: var(--blue); }
+.tlDot[data-tone='notes']    { background: var(--new-bg);      border-color: transparent; color: var(--new); }
+.tlDot[data-tone='delivery'] { background: var(--new-bg);      border-color: transparent; color: var(--new); }
+
+.tlBody { padding-top: 3px; min-width: 0; }
+
+.tlAction {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.tlMeta {
+    margin-top: 2px;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+.tlSep { margin: 0 6px; opacity: 0.6; }
+
+/* ── Banner (demo / db error) ── */
+.banner {
+    padding: 12px 16px;
+    margin-bottom: 18px;
+    border: 1px solid var(--warn-border);
+    border-radius: 11px;
+    background: var(--warn-bg);
+    color: var(--warn-text);
+    font-size: 13.5px;
+}
+
+/* ── Empty state ── */
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 64px 24px;
+    text-align: center;
+}
+
+.emptyArt {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    margin-bottom: 10px;
+    border-radius: 50%;
+    background: var(--blue-soft);
+    color: var(--blue);
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.emptyArt svg { width: 28px; height: 28px; }
+
+.empty h3 {
+    margin: 0;
+    font-family: var(--font-heading), sans-serif;
+    font-size: 16px;
+    font-weight: 650;
+    color: var(--text);
+}
+
+.empty p {
+    margin: 0;
+    max-width: 360px;
+    color: var(--text-dim);
+    font-size: 13.5px;
+    line-height: 1.55;
+}
+
+.empty .btn { margin-top: 12px; }
+
+/* ── Theme + accent controls ── */
+.themeControls { display: flex; align-items: center; gap: 8px; }
+.accentWrap { position: relative; }
+
+.themeBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 13px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-dim);
+    font: inherit;
+    cursor: pointer;
+    line-height: 1.4;
+    box-shadow: var(--shadow-sm);
+}
+.themeBtn:hover { border-color: var(--blue); color: var(--blue); }
+
+.swatch {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.accentMenu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 20;
+    display: grid;
+    gap: 2px;
+    padding: 6px;
+    min-width: 152px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+}
+
+.accentOption {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.accentOption:hover { background: var(--surface-2); }
+.accentOption[data-on='true'] { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
+
+/* ── Dark ──────────────────────────────────────────────────────────────────
+   Only the tokens change; every rule above reads from them. Two selectors for one palette: the
+   media query follows the operating system when no choice is stored (guarded so an explicit light
+   choice still wins on a dark machine), and the attribute selector is the toggle's explicit
+   choice, applied before first paint by the script in layout.tsx. The rail tokens are deliberately
+   NOT redefined — the navy sidebar is brand, and stays dark in both modes. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+        --bg: #0f1216;
+        --bg-2: #14181d;
+        --surface: #171b21;
+        --surface-2: #1b2027;
+        --border: #262d36;
+        --border-strong: #323a45;
+        --text: #e6e9ec;
+        --text-dim: #97a1ab;
+
+        --new: #e6a02f;      --new-bg: #3a2b14;
+        --progress: #4589ee; --progress-bg: #1a2440;
+        --answered: #2fbd67; --answered-bg: #113029;
+        --spam: #e64b45;     --spam-bg: #3a1c1c;
+
+        --th-bg: #1b2027;
+        --row-hover: #1d232b;
+        --warn-bg: #3a2b14;
+        --warn-border: #5c451f;
+        --warn-text: #f0c98a;
+
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.35);
+        --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+        --wash-a: 42%;
+        --wash-b: 26%;
+        --wash-base: 14%;
+        color-scheme: dark;
+    }
+}
+
+:root[data-theme='dark'] {
+    --bg: #0f1216;
+    --bg-2: #14181d;
+    --surface: #171b21;
+    --surface-2: #1b2027;
+    --border: #262d36;
+    --border-strong: #323a45;
+    --text: #e6e9ec;
+    --text-dim: #97a1ab;
+
+    --new: #e6a02f;      --new-bg: #3a2b14;
+    --progress: #4589ee; --progress-bg: #1a2440;
+    --answered: #2fbd67; --answered-bg: #113029;
+    --spam: #e64b45;     --spam-bg: #3a1c1c;
+
+    --th-bg: #1b2027;
+    --row-hover: #1d232b;
+    --warn-bg: #3a2b14;
+    --warn-border: #5c451f;
+    --warn-text: #f0c98a;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+    --wash-a: 42%;
+    --wash-b: 26%;
+    --wash-base: 14%;
+    color-scheme: dark;
+}
+
+/* Logo swap: in dark mode show the two-tone mark (its light blue reads on the dark ground) and
+   hide the dark-blue one. Mirrors the same three selectors the palette uses. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) .brandLogo-light { display: none; }
+    :root:not([data-theme='light']) .brandLogo-dark { display: block; }
+}
+:root[data-theme='dark'] .brandLogo-light { display: none; }
+:root[data-theme='dark'] .brandLogo-dark { display: block; }
+
+/* ── Swappable accent ──────────────────────────────────────────────────────
+   One hue for links, the active tab, focus rings and the sort arrow. --blue is an alias of
+   --accent, so every rule follows the swatch. Each accent carries two values — the ink and the
+   tint behind an active state — restated per mode because a tint that reads as "selected" on
+   white is invisible on near-black. The default is BSS blue. */
+:root {
+    --accent: #2d8fc7;
+    --accent-soft: #e2f1fb;
+}
+
+:root[data-accent='teal']   { --accent: #0f8b82; --accent-soft: #e2f4f2; }
+:root[data-accent='violet'] { --accent: #6d4bd8; --accent-soft: #eee9fb; }
+:root[data-accent='amber']  { --accent: #b4700a; --accent-soft: #fbf0dc; }
+:root[data-accent='rose']   { --accent: #c03a5e; --accent-soft: #fbe7ec; }
+:root[data-accent='slate']  { --accent: #4b5a68; --accent-soft: #eaeef2; }
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) { --accent: #5cb3e4; --accent-soft: #15303f; }
+    :root:not([data-theme='light'])[data-accent='teal']   { --accent: #43c2b7; --accent-soft: #10312e; }
+    :root:not([data-theme='light'])[data-accent='violet'] { --accent: #a48cf0; --accent-soft: #241d3f; }
+    :root:not([data-theme='light'])[data-accent='amber']  { --accent: #e0a63f; --accent-soft: #352713; }
+    :root:not([data-theme='light'])[data-accent='rose']   { --accent: #e87a96; --accent-soft: #3a1b24; }
+    :root:not([data-theme='light'])[data-accent='slate']  { --accent: #9bb0c2; --accent-soft: #222a31; }
+}
+
+:root[data-theme='dark'] { --accent: #5cb3e4; --accent-soft: #15303f; }
+:root[data-theme='dark'][data-accent='teal']   { --accent: #43c2b7; --accent-soft: #10312e; }
+:root[data-theme='dark'][data-accent='violet'] { --accent: #a48cf0; --accent-soft: #241d3f; }
+:root[data-theme='dark'][data-accent='amber']  { --accent: #e0a63f; --accent-soft: #352713; }
+:root[data-theme='dark'][data-accent='rose']   { --accent: #e87a96; --accent-soft: #3a1b24; }
+:root[data-theme='dark'][data-accent='slate']  { --accent: #9bb0c2; --accent-soft: #222a31; }
+
+/* ── Narrow screens ── */
+@media (max-width: 760px) {
+    .wrap { padding: 22px 18px 56px; }
+    .head { flex-direction: column; align-items: stretch; }
+    .headRight { flex-wrap: wrap; }
+    .brandLogo { height: 34px; }
+    .detail-inner { grid-template-columns: 1fr; gap: 20px; }
+}

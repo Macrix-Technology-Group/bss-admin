@@ -1,0 +1,45 @@
+# One container: the app. `docker compose up -d` is the whole deployment.
+#
+# There is deliberately NO database service here. The database is Neon — managed Postgres, the
+# same one the website writes inquiries into — reached over HTTPS with a connection string. So
+# Compose starts the app and points it at that; it does not own, start, back up or upgrade the
+# database, and `docker compose down -v` cannot destroy the data.
+#
+# Because the database is now reached over HTTPS rather than a socket on the local network, this
+# container needs outbound internet access. On a locked-down host that is one firewall rule:
+# outbound 443 to *.neon.tech.
+
+services:
+    app:
+        build: .
+        restart: unless-stopped
+        environment:
+            # The one credential the app needs. Same value as the website's DATABASE_URL — both
+            # applications read and write the same rows, and nothing syncs between them.
+            DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+
+            # Only used if the website posts to /api/inquiries rather than writing to the
+            # database directly. Optional now, which is why it has no :? guard.
+            INGEST_TOKEN: ${INGEST_TOKEN:-}
+
+            # Mail, through Microsoft Graph against one shared mailbox. Leave unset and the
+            # desk still works — the Reply button is simply the only thing that fails, and it
+            # says so rather than breaking the page.
+            MS_TENANT_ID: ${MS_TENANT_ID:-}
+            MS_CLIENT_ID: ${MS_CLIENT_ID:-}
+            MS_CLIENT_SECRET: ${MS_CLIENT_SECRET:-}
+            MAIL_MAILBOX: ${MAIL_MAILBOX:-}
+            MAIL_REPLY_ADDRESS: ${MAIL_REPLY_ADDRESS:-}
+            MAIL_REPLY_SECRET: ${MAIL_REPLY_SECRET:-}
+            POLL_TOKEN: ${POLL_TOKEN:-}
+        ports:
+            # Bound to 127.0.0.1, NOT 0.0.0.0. This is the single most important line in the file:
+            # the screen has no login, so the only thing standing between customer data and the
+            # network is where this port is published. As written, the app is reachable only from
+            # the server itself, and it is the reverse proxy in front of it that decides who else
+            # may reach it.
+            #
+            # Changing this to "3100:3100" publishes an unauthenticated list of customer names,
+            # emails and phone numbers to every machine that can route to this host. Do not,
+            # unless a login has been added first.
+            - '127.0.0.1:3100:3100'
