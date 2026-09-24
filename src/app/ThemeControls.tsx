@@ -37,17 +37,22 @@ export default function ThemeControls() {
        script in layout.tsx, which runs before first paint. */
     useEffect(() => {
         setMounted(true);
+        const el = document.documentElement;
 
         /* Dark is the default when nothing has been chosen — not the operating system's setting.
-           The pre-paint script in layout.tsx stamps the same default, so the first frame already
-           matches this. */
+           The pre-paint script in layout.tsx stamps the same default to avoid a flash; we ALSO
+           apply it here on mount so the page is correct even if that script did not take effect in
+           the production build (which is what caused the accent to fall back to blue on refresh). */
         const storedMode = localStorage.getItem('theme');
-        setMode(storedMode === 'light' || storedMode === 'dark' ? storedMode : 'dark');
+        const m: Mode = storedMode === 'light' || storedMode === 'dark' ? storedMode : 'dark';
+        setMode(m);
+        el.dataset.theme = m;
 
         const storedAccent = localStorage.getItem('accent');
-        if (storedAccent && ACCENTS.some((a) => a.id === storedAccent)) {
-            setAccent(storedAccent as Accent);
-        }
+        const a: Accent =
+            storedAccent && ACCENTS.some((x) => x.id === storedAccent) ? (storedAccent as Accent) : 'blue';
+        setAccent(a);
+        el.dataset.accent = a;
     }, []);
 
     const flipMode = () => {
