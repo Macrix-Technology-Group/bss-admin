@@ -229,6 +229,17 @@ export default function InquiriesTable({
     const columns = useMemo<ColumnDef<Inquiry>[]>(
         () => [
             {
+                /* The inquiry's reference — the same "BSS-MX-<id>" that goes in the email subject, so
+                   a reply tagged [BSS-MX-42] can be found here at a glance. */
+                id: 'ref',
+                accessorKey: 'id',
+                header: 'Ref',
+                enableColumnFilter: false,
+                cell: ({ getValue }) => (
+                    <span className="nowrap muted refCell">BSS-MX-{getValue<string>()}</span>
+                ),
+            },
+            {
                 id: 'received_at',
                 accessorKey: 'received_at',
                 header: 'Received',
@@ -459,6 +470,8 @@ export default function InquiriesTable({
                         )}
                         <input
                             ref={searchRef}
+                            id="inquiry-search"
+                            name="inquiry-search"
                             type="search"
                             value={query}
                             onChange={(e) => onSearch(e.target.value)}
