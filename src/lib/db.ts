@@ -28,22 +28,19 @@ function pool(): Pool {
                connection is still encrypted, just not chain-verified. */
             connectionString: url.replace(/([?&])sslmode=[^&]*/g, '$1').replace(/[?&]+$/, ''),
             /* Small pool — one container, a handful of people. */
-            max: 5,
-            /* Close our own idle connections quickly. Supabase's pooler drops idle connections
-               server-side; if we hold one longer than that, we hand out a DEAD connection and the
-               next query hangs on it forever. Closing ours first means we mostly open fresh, live
-               ones. The query timeout + retry below catch the cases that still slip through. */
-            idleTimeoutMillis: 20_000,
+            max: 3,
+            /* Close our own idle connections quickly, so we rarely hold one long enough for
+               Supabase's pooler to drop it server-side (which leaves us with a dead connection). */
+            idleTimeoutMillis: 5_000,
             connectionTimeoutMillis: 10_000,
-            /* The single most important line here: cap how long a query may run. Without it, a query
-               sent on a stale (server-closed) connection hangs indefinitely, which freezes the whole
-               page render — the cause of the "loads for minutes" symptom. 8s is far above any real
-               query here (they run in tens of ms), so this only ever fires on a dead connection. */
-            query_timeout: 8_000,
-            statement_timeout: 8_000,
+            /* Cap how long a query may run. A query sent on a stale connection would otherwise hang
+               forever and freeze the page render. 5s is far above any real query here (tens of ms),
+               so it only fires on a dead connection — at which point sql() destroys it and retries. */
+            query_timeout: 5_000,
+            statement_timeout: 5_000,
             /* TCP keepalive, so the OS notices a dropped socket sooner rather than waiting it out. */
             keepAlive: true,
-            keepAliveInitialDelayMillis: 10_000,
+            keepAliveInitialDelayMillis: 5_000,
             /* The connection is TLS; the pooler presents a valid cert but not always a chain node
                can verify, so encrypt without failing on the chain. */
             ssl: { rejectUnauthorized: false },
@@ -63,16 +60,27 @@ export function sql(): SqlTag {
             text += part;
             if (i < values.length) text += `$${i + 1}`;
         });
-        try {
-            return (await p.query(text, values)).rows as Row[];
-        } catch (err) {
-            /* A stale (server-closed) connection surfaces as a connection or timeout error, never a
-               SQL error. The pool discards the bad connection on failure, so a single retry runs on
-               a fresh, live one. Retried only once, and only for connection-level failures — a real
-               SQL error (constraint, syntax) is thrown straight through, not retried. */
-            if (!isConnectionError(err)) throw err;
-            return (await p.query(text, values)).rows as Row[];
+
+        /* Check a connection out of the pool by hand so a dead one can be DESTROYED, not returned to
+           the pool. This is the fix for the freeze: pool.query() would hand the same stale connection
+           to the retry, which hung again. Here, release(true) evicts the bad connection, so each
+           attempt gets a different — and eventually fresh, live — one. Up to three tries: enough to
+           clear out a couple of stale connections and land on a good one, each bounded by the pool's
+           query_timeout. A real SQL error (constraint, syntax) is thrown on the first attempt. */
+        let lastErr: unknown;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            const client = await p.connect();
+            try {
+                const res = await client.query(text, values);
+                client.release();
+                return res.rows as Row[];
+            } catch (err) {
+                client.release(true); // destroy — a stale/broken connection must leave the pool
+                lastErr = err;
+                if (!isConnectionError(err)) throw err;
+            }
         }
+        throw lastErr;
     };
 }
 
