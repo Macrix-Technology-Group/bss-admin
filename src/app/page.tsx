@@ -1,3 +1,4 @@
+import { after } from 'next/server';
 import type { Inquiry, InquiryEvent, InquiryMessage } from '@/lib/inquiry';
 import InquiriesTable from './InquiriesTable';
 import ThemeControls from './ThemeControls';
@@ -13,6 +14,16 @@ const DEMO = process.env.DEMO_DATA === '1';
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+    /* Fetch new mail replies on load, in the background (after the response is sent, so it never
+       slows the page). This replaces the 60s background timer: mail is captured when someone opens
+       or refreshes the desk. maybePoll throttles itself, so rapid refreshes don't hammer Graph. */
+    if (!DEMO) {
+        after(async () => {
+            const { maybePoll } = await import('@/lib/mailPoll');
+            await maybePoll();
+        });
+    }
+
     /* One plain SELECT. Sorting and filtering moved into the table (see InquiriesTable), so this
        no longer builds a WHERE clause per click — it loads the working set once and the browser
        does the rest. */

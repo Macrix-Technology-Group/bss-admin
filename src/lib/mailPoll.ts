@@ -199,8 +199,27 @@ export async function pollOnce(): Promise<PollResult> {
     return { seen, filed, automated };
 }
 
-/* Whether mail is configured at all — the timer uses this to stay quiet when the mailbox is not
-   set up yet, instead of logging an error every interval. */
+/* Poll on demand, at most once per window. Called when the admin page loads (see page.tsx) instead
+   of a background timer: replies are fetched when someone is actually looking at the desk, and the
+   server never does idle work when no one is. The gap stops a burst of refreshes from hammering
+   Graph — a second load inside the window just reuses what the first fetched. */
+const POLL_MIN_GAP_MS = Number(process.env.MAIL_POLL_MIN_GAP_MS ?? 20_000);
+
+export async function maybePoll(): Promise<void> {
+    if (!mailConfigured()) return;
+    const g = globalThis as unknown as { __lastMailPoll?: number };
+    const now = Date.now();
+    if (g.__lastMailPoll && now - g.__lastMailPoll < POLL_MIN_GAP_MS) return;
+    g.__lastMailPoll = now;
+    try {
+        await pollOnce();
+    } catch (err) {
+        console.error('[mail poll] on-load poll failed:', err);
+    }
+}
+
+/* Whether mail is configured at all — used to stay quiet when the mailbox is not set up yet,
+   instead of logging an error on every page load. */
 export function mailConfigured(): boolean {
     return Boolean(
         process.env.MS_TENANT_ID &&
