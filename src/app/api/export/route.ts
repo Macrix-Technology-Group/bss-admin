@@ -36,7 +36,7 @@ export async function GET() {
 
     const body = rows.map((r) =>
         [
-            new Date(r.received_at).toLocaleString('de-DE'),
+            new Date(r.received_at).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }),
             r.first_name, r.last_name, r.company, r.email, r.phone,
             r.subject, r.message, r.status, r.assignee, r.notes, r.locale,
             r.consent_given ? 'yes' : 'no', r.privacy_version,

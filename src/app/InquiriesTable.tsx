@@ -237,10 +237,10 @@ export default function InquiriesTable({
                     const d = new Date(getValue<string>());
                     return (
                         <span className="nowrap muted">
-                            {d.toLocaleDateString('de-DE')}
+                            {d.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' })}
                             <br />
                             <span style={{ fontSize: 12 }}>
-                                {d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                                {d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })}
                             </span>
                         </span>
                     );

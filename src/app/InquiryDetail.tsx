@@ -214,6 +214,7 @@ export default function InquiryDetail({
                                         {received.toLocaleString('de-DE', {
                                             day: '2-digit', month: '2-digit',
                                             hour: '2-digit', minute: '2-digit',
+                                            timeZone: 'Europe/Berlin',
                                         })}
                                     </time>
                                 </div>
@@ -236,6 +237,7 @@ export default function InquiryDetail({
                                             {new Date(m.at).toLocaleString('de-DE', {
                                                 day: '2-digit', month: '2-digit',
                                                 hour: '2-digit', minute: '2-digit',
+                                                timeZone: 'Europe/Berlin',
                                             })}
                                         </time>
                                     </div>
@@ -260,6 +262,7 @@ export default function InquiryDetail({
                                                     {new Date(event.at).toLocaleString('de-DE', {
                                                         day: '2-digit', month: 'short', year: 'numeric',
                                                         hour: '2-digit', minute: '2-digit',
+                                                        timeZone: 'Europe/Berlin',
                                                     })}
                                                 </time>
                                                 {displayActor(event.actor) && (
@@ -413,7 +416,7 @@ export default function InquiryDetail({
             <div className="detailFoot">
                 <span className="dfItem">
                     <span className="dfLabel">Received</span>
-                    {received.toLocaleString('de-DE')}
+                    {received.toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}
                 </span>
                 {q.locale && (
                     <span className="dfItem">
