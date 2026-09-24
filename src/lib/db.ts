@@ -30,7 +30,10 @@ function pool(): Pool {
             /* Small pool — one container, a handful of people. The Supabase free pooler has a
                modest connection budget, and this stays well inside it. */
             max: 5,
-            idleTimeoutMillis: 30_000,
+            /* Keep idle connections open for 10 minutes rather than 30 seconds. Combined with the
+               keep-alive ping below, this means the pool holds a warm connection between page loads,
+               so the first request after a quiet spell is not slow re-opening a cold one. */
+            idleTimeoutMillis: 600_000,
             connectionTimeoutMillis: 10_000,
             /* The connection is TLS; the pooler presents a valid cert but not always a chain node
                can verify, so encrypt without failing on the chain. */
@@ -54,6 +57,13 @@ export function sql(): SqlTag {
         const res = await p.query(text, values);
         return res.rows as Row[];
     };
+}
+
+/* A tiny query that keeps the pooled connection (and Supabase's compute) warm. Run on a timer from
+   instrumentation.ts so a connection is always ready — the fix for the slow first load after the
+   desk has been idle for a while. Cheap: one round trip every few minutes, nothing more. */
+export async function keepAlive(): Promise<void> {
+    await pool().query('SELECT 1');
 }
 
 /* ── Reading the list ──────────────────────────────────────────────────────
