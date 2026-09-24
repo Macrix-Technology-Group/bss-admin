@@ -27,14 +27,23 @@ function pool(): Pool {
                pooler presents a cert Node will not chain to on its own ("self-signed in chain"); the
                connection is still encrypted, just not chain-verified. */
             connectionString: url.replace(/([?&])sslmode=[^&]*/g, '$1').replace(/[?&]+$/, ''),
-            /* Small pool — one container, a handful of people. The Supabase free pooler has a
-               modest connection budget, and this stays well inside it. */
+            /* Small pool — one container, a handful of people. */
             max: 5,
-            /* Keep idle connections open for 10 minutes rather than 30 seconds. Combined with the
-               keep-alive ping below, this means the pool holds a warm connection between page loads,
-               so the first request after a quiet spell is not slow re-opening a cold one. */
-            idleTimeoutMillis: 600_000,
+            /* Close our own idle connections quickly. Supabase's pooler drops idle connections
+               server-side; if we hold one longer than that, we hand out a DEAD connection and the
+               next query hangs on it forever. Closing ours first means we mostly open fresh, live
+               ones. The query timeout + retry below catch the cases that still slip through. */
+            idleTimeoutMillis: 20_000,
             connectionTimeoutMillis: 10_000,
+            /* The single most important line here: cap how long a query may run. Without it, a query
+               sent on a stale (server-closed) connection hangs indefinitely, which freezes the whole
+               page render — the cause of the "loads for minutes" symptom. 8s is far above any real
+               query here (they run in tens of ms), so this only ever fires on a dead connection. */
+            query_timeout: 8_000,
+            statement_timeout: 8_000,
+            /* TCP keepalive, so the OS notices a dropped socket sooner rather than waiting it out. */
+            keepAlive: true,
+            keepAliveInitialDelayMillis: 10_000,
             /* The connection is TLS; the pooler presents a valid cert but not always a chain node
                can verify, so encrypt without failing on the chain. */
             ssl: { rejectUnauthorized: false },
@@ -54,16 +63,33 @@ export function sql(): SqlTag {
             text += part;
             if (i < values.length) text += `$${i + 1}`;
         });
-        const res = await p.query(text, values);
-        return res.rows as Row[];
+        try {
+            return (await p.query(text, values)).rows as Row[];
+        } catch (err) {
+            /* A stale (server-closed) connection surfaces as a connection or timeout error, never a
+               SQL error. The pool discards the bad connection on failure, so a single retry runs on
+               a fresh, live one. Retried only once, and only for connection-level failures — a real
+               SQL error (constraint, syntax) is thrown straight through, not retried. */
+            if (!isConnectionError(err)) throw err;
+            return (await p.query(text, values)).rows as Row[];
+        }
     };
 }
 
-/* A tiny query that keeps the pooled connection (and Supabase's compute) warm. Run on a timer from
-   instrumentation.ts so a connection is always ready — the fix for the slow first load after the
-   desk has been idle for a while. Cheap: one round trip every few minutes, nothing more. */
-export async function keepAlive(): Promise<void> {
-    await pool().query('SELECT 1');
+/* True for the errors a dead/stale pooled connection produces — as opposed to a genuine SQL error.
+   These are the only ones worth retrying, because the query never reached a live server. */
+function isConnectionError(err: unknown): boolean {
+    const e = err as { code?: string; message?: string };
+    const msg = (e.message ?? '').toLowerCase();
+    return (
+        e.code === 'ECONNRESET' ||
+        e.code === 'EPIPE' ||
+        e.code === 'ETIMEDOUT' ||
+        msg.includes('connection terminated') ||
+        msg.includes('connection error') ||
+        msg.includes('server closed') ||
+        msg.includes('timeout')
+    );
 }
 
 /* ── Reading the list ──────────────────────────────────────────────────────
