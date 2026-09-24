@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import type { Inquiry, InquiryEvent, InquiryMessage } from './inquiry';
 
 export { STATUSES } from './inquiry';
@@ -29,15 +29,15 @@ function pool(): Pool {
             connectionString: url.replace(/([?&])sslmode=[^&]*/g, '$1').replace(/[?&]+$/, ''),
             /* Small pool — one container, a handful of people. */
             max: 3,
-            /* Close our own idle connections quickly, so we rarely hold one long enough for
-               Supabase's pooler to drop it server-side (which leaves us with a dead connection). */
-            idleTimeoutMillis: 5_000,
+            /* Close our own idle connections after 1 second. Between page loads the pool is then
+               empty, so the next request opens a FRESH (guaranteed live) connection rather than
+               reusing one Supabase's pooler may have dropped. This is what stops the post-idle
+               freeze at the source; the health-check in sql() covers the rare gap. */
+            idleTimeoutMillis: 1_000,
             connectionTimeoutMillis: 10_000,
-            /* Cap how long a query may run. A query sent on a stale connection would otherwise hang
-               forever and freeze the page render. 5s is far above any real query here (tens of ms),
-               so it only fires on a dead connection — at which point sql() destroys it and retries. */
-            query_timeout: 5_000,
-            statement_timeout: 5_000,
+            /* Hard cap on any query, as a last resort. */
+            query_timeout: 6_000,
+            statement_timeout: 6_000,
             /* TCP keepalive, so the OS notices a dropped socket sooner rather than waiting it out. */
             keepAlive: true,
             keepAliveInitialDelayMillis: 5_000,
@@ -52,6 +52,34 @@ function pool(): Pool {
 /* A tagged-template query that keeps the call sites unchanged: `await sql`SELECT … ${value}`` still
    parameterises each ${value} as a bound argument ($1, $2, …) and resolves to the rows. This is the
    same shape the Neon driver exposed, so nothing else in this file had to change. */
+/* Rejects if `p` has not settled within `ms` — a hard cap independent of pg's own timeouts, so a
+   connection wedged at the socket level can never hang a request longer than this. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return Promise.race([
+        p,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), ms)),
+    ]);
+}
+
+/* A connection that has just answered a `SELECT 1` — i.e. proven alive THIS instant. A dead one
+   (Supabase closed it while it sat in the pool) fails the check within 2s and is destroyed so it
+   leaves the pool; the next attempt gets another, and within a few tries lands on a live one. This
+   is what makes a hang impossible: the real query only ever runs on a connection we just verified. */
+async function liveClient(p: Pool): Promise<PoolClient> {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 4; attempt++) {
+        const client = await withTimeout(p.connect(), 8_000, 'connect');
+        try {
+            await withTimeout(client.query('SELECT 1'), 2_000, 'health check');
+            return client;
+        } catch (err) {
+            client.release(true); // destroy the dead/wedged connection
+            lastErr = err;
+        }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error('database unreachable');
+}
+
 export function sql(): SqlTag {
     const p = pool();
     return async (strings, ...values) => {
@@ -61,43 +89,16 @@ export function sql(): SqlTag {
             if (i < values.length) text += `$${i + 1}`;
         });
 
-        /* Check a connection out of the pool by hand so a dead one can be DESTROYED, not returned to
-           the pool. This is the fix for the freeze: pool.query() would hand the same stale connection
-           to the retry, which hung again. Here, release(true) evicts the bad connection, so each
-           attempt gets a different — and eventually fresh, live — one. Up to three tries: enough to
-           clear out a couple of stale connections and land on a good one, each bounded by the pool's
-           query_timeout. A real SQL error (constraint, syntax) is thrown on the first attempt. */
-        let lastErr: unknown;
-        for (let attempt = 0; attempt < 3; attempt++) {
-            const client = await p.connect();
-            try {
-                const res = await client.query(text, values);
-                client.release();
-                return res.rows as Row[];
-            } catch (err) {
-                client.release(true); // destroy — a stale/broken connection must leave the pool
-                lastErr = err;
-                if (!isConnectionError(err)) throw err;
-            }
+        const client = await liveClient(p);
+        try {
+            const res = await client.query(text, values);
+            client.release();
+            return res.rows as Row[];
+        } catch (err) {
+            client.release(true);
+            throw err;
         }
-        throw lastErr;
     };
-}
-
-/* True for the errors a dead/stale pooled connection produces — as opposed to a genuine SQL error.
-   These are the only ones worth retrying, because the query never reached a live server. */
-function isConnectionError(err: unknown): boolean {
-    const e = err as { code?: string; message?: string };
-    const msg = (e.message ?? '').toLowerCase();
-    return (
-        e.code === 'ECONNRESET' ||
-        e.code === 'EPIPE' ||
-        e.code === 'ETIMEDOUT' ||
-        msg.includes('connection terminated') ||
-        msg.includes('connection error') ||
-        msg.includes('server closed') ||
-        msg.includes('timeout')
-    );
 }
 
 /* ── Reading the list ──────────────────────────────────────────────────────
