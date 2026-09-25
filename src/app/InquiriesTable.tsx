@@ -82,6 +82,20 @@ function EmptyTag({ title }: { title?: string }) {
     return <span className="emptySlot" title={title}>Empty</span>;
 }
 
+/* The website substitutes "—" for an optional field the visitor left blank (last name, company),
+   because the desk's columns are required. Treat that placeholder — and any blank — as empty, so the
+   table shows the "Empty" tag everywhere instead of a bare dash. */
+function isBlank(v: string | null | undefined): boolean {
+    const s = (v ?? '').trim();
+    return s === '' || s === '—' || s === '-';
+}
+
+/* First and last joined, dropping a blank or placeholder part, so a one-name sender reads as
+   "Sherin" rather than "Sherin —". */
+function fullName(first: string | null, last: string | null): string {
+    return [first, last].filter((p) => !isBlank(p)).join(' ').trim();
+}
+
 /* Status badge: a lifecycle track that fills as the inquiry advances New 1/3 → In progress 2/3 →
    Answered 3/3, with the label in the status colour. Two states sit outside that pipeline and keep
    the same badge width so the column stays a tidy stack: Closed shows one solid bar, Spam shows a
@@ -325,26 +339,31 @@ export default function InquiriesTable({
                 /* One column, two fields. Sorting and filtering "From" should consider the person
                    AND the company, because that is how someone thinks about it — they remember
                    "the one from Hofmeister" without remembering the name. */
-                accessorFn: (r) => `${r.first_name} ${r.last_name} ${r.company}`,
+                accessorFn: (r) =>
+                    [fullName(r.first_name, r.last_name), isBlank(r.company) ? '' : r.company]
+                        .filter(Boolean)
+                        .join(' '),
                 header: 'From',
                 filterFn: 'includesString',
-                cell: ({ row }) => (
-                    <div className="fromCell">
-                        <GeneratedAvatar
-                            seed={row.original.company || `${row.original.first_name} ${row.original.last_name}`}
-                        />
-                        <div>
-                            <div className="who">
-                                {hlRef.current(`${row.original.first_name} ${row.original.last_name}`, 'from')}
-                            </div>
-                            <div className="muted">
-                                {row.original.company
-                                    ? hlRef.current(row.original.company, 'from')
-                                    : <EmptyTag title="No company" />}
+                cell: ({ row }) => {
+                    const name = fullName(row.original.first_name, row.original.last_name);
+                    const company = row.original.company;
+                    return (
+                        <div className="fromCell">
+                            <GeneratedAvatar seed={isBlank(company) ? name || row.original.email : company} />
+                            <div>
+                                <div className="who">
+                                    {name ? hlRef.current(name, 'from') : <EmptyTag title="No name" />}
+                                </div>
+                                <div className="muted">
+                                    {isBlank(company)
+                                        ? <EmptyTag title="No company" />
+                                        : hlRef.current(company, 'from')}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ),
+                    );
+                },
             },
             {
                 id: 'email',
