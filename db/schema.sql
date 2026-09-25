@@ -58,8 +58,18 @@ CREATE TABLE IF NOT EXISTS inquiries (
     updated_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
 
     CONSTRAINT inquiries_status_chk
-        CHECK (status IN ('new', 'in_progress', 'answered', 'spam'))
+        CHECK (status IN ('new', 'in_progress', 'answered', 'closed', 'spam'))
 );
+
+-- Keep the status CHECK in step with the app's status list on a database that already exists.
+-- CREATE TABLE above is IF NOT EXISTS, so on an existing table it is a no-op and would never widen
+-- the constraint — a status added later (e.g. 'closed') would be rejected until someone ran a
+-- migration by hand. Re-applying it here on every boot removes that step: drop the old constraint
+-- if present, add the current one. Existing rows already hold a subset of these values, so the add
+-- validates instantly.
+ALTER TABLE inquiries DROP CONSTRAINT IF EXISTS inquiries_status_chk;
+ALTER TABLE inquiries ADD  CONSTRAINT inquiries_status_chk
+    CHECK (status IN ('new', 'in_progress', 'answered', 'closed', 'spam'));
 
 -- The list is always newest-first and usually filtered by status, so these two earn their keep.
 -- email and company are indexed because they are what someone searches by when they are looking

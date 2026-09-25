@@ -117,8 +117,10 @@ export async function setNotes(id: string, notes: string) {
    mail sent but not recorded shows up as the customer's reply quoting something the desk cannot
    find — visible, and recoverable from the mailbox.
 
-   Marks the inquiry answered in the same step. Someone who has just written a reply should not
-   have to remember a dropdown as well, and in the history it reads as one action. */
+   Moves the inquiry to 'in_progress' in the same step: a reply has gone out but the conversation
+   is not finished, so it is under way, not done. Someone who has just written a reply should not
+   have to remember a dropdown as well, and in the history it reads as one action. The terminal
+   'Closed' state is set by hand when the thread is actually over. */
 export async function sendReply(id: string, subject: string, body: string) {
     if (DEMO) return { ok: false, error: 'Demo mode — nothing is sent.' };
 
@@ -165,7 +167,7 @@ export async function sendReply(id: string, subject: string, body: string) {
         return { ok: false, error: 'The mail could not be sent. Nothing was saved.' };
     }
 
-    await setStatus(id, 'answered');
+    await setStatus(id, 'in_progress');
     revalidatePath('/');
 
     return { ok: true };

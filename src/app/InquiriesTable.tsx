@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
     flexRender,
     getCoreRowModel,
@@ -12,10 +12,16 @@ import {
     useReactTable,
     type ColumnDef,
     type ColumnFiltersState,
+    type OnChangeFn,
     type SortingState,
 } from '@tanstack/react-table';
 import { STATUSES, TEAM, type Inquiry, type InquiryEvent, type InquiryMessage } from '@/lib/inquiry';
 import InquiryDetail from './InquiryDetail';
+
+/* The status value the "All" tab (and every non-Spam view) filters by: everything except spam.
+   Spam is deliberately walled off — it only ever appears when the Spam tab itself is selected — so
+   "All" cannot be the plain "no filter" it usually is, or spam would leak into it. */
+const NONSPAM = '__nonspam';
 
 /* The inquiry list, on TanStack Table.
  *
@@ -77,14 +83,15 @@ function EmptyTag({ title }: { title?: string }) {
 }
 
 /* Status badge: a lifecycle track that fills as the inquiry advances New 1/3 → In progress 2/3 →
-   Answered 3/3, with the label in the status colour. Spam sits outside the pipeline, so instead of
-   the three segments it shows one solid bar of the same total length — the badge stays the same
-   shape and the label never shifts. */
-const STATUS_META: Record<string, { filled: number; track: boolean }> = {
-    new:         { filled: 1, track: true },
-    in_progress: { filled: 2, track: true },
-    answered:    { filled: 3, track: true },
-    spam:        { filled: 0, track: false },
+   Answered 3/3, with the label in the status colour. Two states sit outside that pipeline and keep
+   the same badge width so the column stays a tidy stack: Closed shows one solid bar, Spam shows a
+   ban icon (a circle with a line through it). */
+const STATUS_META: Record<string, { filled: number; kind: 'track' | 'bar' | 'ban' }> = {
+    new:         { filled: 1, kind: 'track' },
+    in_progress: { filled: 2, kind: 'track' },
+    answered:    { filled: 3, kind: 'track' },
+    closed:      { filled: 0, kind: 'bar' },
+    spam:        { filled: 0, kind: 'ban' },
 };
 
 function StatusPill({ value }: { value: string }) {
@@ -93,12 +100,16 @@ function StatusPill({ value }: { value: string }) {
     return (
         <span className="pill" data-s={value}>
             <span className="pillTrack" aria-hidden="true">
-                {meta?.track ? (
+                {meta?.kind === 'track' &&
                     [0, 1, 2].map((i) => (
                         <span key={i} className="pillSeg" data-on={i < meta.filled} />
-                    ))
-                ) : (
-                    <span className="pillSeg pillSegFull" data-on="true" />
+                    ))}
+                {meta?.kind === 'bar' && <span className="pillSeg pillSegFull" data-on="true" />}
+                {meta?.kind === 'ban' && (
+                    <svg className="pillIcon" viewBox="0 0 16 16">
+                        <circle cx="8" cy="8" r="6.2" />
+                        <line x1="3.7" y1="3.7" x2="12.3" y2="12.3" />
+                    </svg>
                 )}
             </span>
             <span className="pillLabel">{label}</span>
@@ -193,8 +204,38 @@ export default function InquiriesTable({
     /* Same shape, same reason: the conversation for every row, fetched once. */
     messages?: Record<string, InquiryMessage[]>;
 }) {
-    const [sorting, setSorting] = useState<SortingState>([{ id: 'received_at', desc: true }]);
-    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+    /* '__order' is always the first sort key and the user cannot remove it (see setSortingPinned):
+       it forces closed inquiries to the bottom whatever else the table is sorted by. 'received_at'
+       is the visible default beneath it. */
+    const [sorting, setSorting] = useState<SortingState>([
+        { id: '__order', desc: false },
+        { id: 'received_at', desc: true },
+    ]);
+    /* Starts on the status filter, not empty: the baseline view is "everything except spam", so the
+       status column always carries at least NONSPAM. */
+    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([
+        { id: 'status', value: NONSPAM },
+    ]);
+
+    /* Whatever the user sorts by, keep '__order' pinned in front so closed rows never rise out of
+       the bottom. A header click replaces the sort with a single column; this re-prepends ours. */
+    const setSortingPinned: OnChangeFn<SortingState> = (updater) => {
+        setSorting((old) => {
+            const next = typeof updater === 'function' ? updater(old) : updater;
+            const userSorts = next.filter((s) => s.id !== '__order');
+            return [{ id: '__order', desc: false }, ...userSorts];
+        });
+    };
+
+    /* Safety net: the status column must always carry a filter, because "no status filter" would
+       fall through and show spam in every view. If anything ever leaves it empty, restore the
+       NONSPAM baseline. */
+    useEffect(() => {
+        if (!columnFilters.some((f) => f.id === 'status')) {
+            setColumnFilters((cf) => [...cf, { id: 'status', value: NONSPAM }]);
+        }
+    }, [columnFilters]);
+
     const [globalFilter, setGlobalFilter] = useState('');
     const [expanded, setExpanded] = useState<string | null>(null);
     /* Whether the per-column boxes are shown at all — see the toggle in the bar below. */
@@ -228,6 +269,28 @@ export default function InquiriesTable({
 
     const columns = useMemo<ColumnDef<Inquiry>[]>(
         () => [
+            {
+                /* Never rendered (hidden via columnVisibility) — it exists only to sort. Kept as the
+                   first sort key, it parks every closed inquiry below the rest: closed rows sort
+                   after open ones, and among themselves oldest-closed first so the most recently
+                   closed sits at the very bottom (updated_at moves to now() when a status changes).
+                   Returning 0 for two open rows lets the user's own column sort decide their order. */
+                id: '__order',
+                accessorFn: () => 0,
+                enableColumnFilter: false,
+                sortingFn: (a, b) => {
+                    const ca = a.original.status === 'closed';
+                    const cb = b.original.status === 'closed';
+                    if (ca !== cb) return ca ? 1 : -1;
+                    if (ca && cb) {
+                        return (
+                            new Date(a.original.updated_at).getTime() -
+                            new Date(b.original.updated_at).getTime()
+                        );
+                    }
+                    return 0;
+                },
+            },
             {
                 /* The inquiry's reference — the same "BSS-MX-<id>" that goes in the email subject, so
                    a reply tagged [BSS-MX-42] can be found here at a glance. */
@@ -316,9 +379,14 @@ export default function InquiriesTable({
                 id: 'status',
                 accessorKey: 'status',
                 header: 'Status',
-                /* equalsString, not the default: a status filter is a choice from a fixed list, so
-                   selecting "New" must not also match a hypothetical "Newly assigned". */
-                filterFn: 'equalsString',
+                /* A specific value matches that status exactly (a choice from a fixed list — "New"
+                   must not also match a hypothetical "Newly assigned"). The NONSPAM sentinel, which
+                   the "All" tab and every non-Spam view carry, matches everything except spam: spam
+                   is only ever shown when the Spam tab is selected. */
+                filterFn: (row, id, value) => {
+                    const s = row.getValue<string>(id);
+                    return value === NONSPAM ? s !== 'spam' : s === value;
+                },
                 cell: ({ getValue }) => <StatusPill value={getValue<string>()} />,
             },
             {
@@ -341,11 +409,15 @@ export default function InquiriesTable({
         [],
     );
 
+    /* Controlled, not initialState: '__order' must stay hidden for good. As initialState it only
+       seeds the first mount, which a dev hot-reload can skip — leaving the helper column on screen. */
+    const columnVisibility = useMemo(() => ({ __order: false }), []);
+
     const table = useReactTable({
         data: rows,
         columns,
-        state: { sorting, columnFilters, globalFilter },
-        onSortingChange: setSorting,
+        state: { sorting, columnFilters, globalFilter, columnVisibility },
+        onSortingChange: setSortingPinned,
         onColumnFiltersChange: setColumnFilters,
         onGlobalFilterChange: setGlobalFilter,
         /* The search box searches the whole inquiry, including the message body, which is not a
@@ -375,7 +447,20 @@ export default function InquiriesTable({
     const statusCounts = statusCol?.getFacetedUniqueValues() ?? new Map();
 
     const filtered = table.getFilteredRowModel().rows.length;
-    const anyFilter = globalFilter !== '' || columnFilters.length > 0 || scope !== null;
+
+    /* The status the tabs are on. NONSPAM is the baseline ("All"), so it does not count as a filter
+       the user has applied — otherwise Clear would always show and the empty state would always
+       read "no matches". Per-column text filters and a real status choice do count. */
+    const statusFilterValue = (statusCol?.getFilterValue() as string | undefined) ?? NONSPAM;
+    const colFiltersApplied = columnFilters.filter((f) => f.id !== 'status');
+    const anyFilter =
+        globalFilter !== '' ||
+        colFiltersApplied.length > 0 ||
+        statusFilterValue !== NONSPAM ||
+        scope !== null;
+
+    /* "All" shows every inquiry except spam — spam has its own tab and appears nowhere else. */
+    const allCount = rows.reduce((n, r) => (r.status === 'spam' ? n : n + 1), 0);
 
     /* The active scope, and the columns the "@" menu is currently offering (filtered by whatever
        has been typed after the "@"). */
@@ -419,7 +504,8 @@ export default function InquiriesTable({
 
     function clearAll() {
         setGlobalFilter('');
-        setColumnFilters([]);
+        /* Back to the baseline, not empty: an empty status filter would let spam back into the list. */
+        setColumnFilters([{ id: 'status', value: NONSPAM }]);
         setScope(null);
         setQuery('');
         setAtOpen(false);
@@ -435,21 +521,19 @@ export default function InquiriesTable({
                 <button
                     type="button"
                     className="tab"
-                    data-on={!statusCol?.getFilterValue()}
-                    onClick={() => statusCol?.setFilterValue(undefined)}
+                    data-on={statusFilterValue === NONSPAM}
+                    onClick={() => statusCol?.setFilterValue(NONSPAM)}
                 >
-                    All <span className="n">{rows.length}</span>
+                    All <span className="n">{allCount}</span>
                 </button>
                 {STATUSES.map((s) => (
                     <button
                         key={s.value}
                         type="button"
                         className="tab"
-                        data-on={statusCol?.getFilterValue() === s.value}
+                        data-on={statusFilterValue === s.value}
                         onClick={() =>
-                            statusCol?.setFilterValue(
-                                statusCol.getFilterValue() === s.value ? undefined : s.value,
-                            )
+                            statusCol?.setFilterValue(statusFilterValue === s.value ? NONSPAM : s.value)
                         }
                     >
                         {s.label} <span className="n">{statusCounts.get(s.value) ?? 0}</span>
@@ -523,12 +607,15 @@ export default function InquiriesTable({
                         data-on={showColFilters}
                         aria-pressed={showColFilters}
                         onClick={() => {
-                            if (showColFilters) setColumnFilters([]);
+                            /* Drop the per-column boxes but keep the status baseline, or spam would
+                               reappear the moment the filters are hidden. */
+                            if (showColFilters)
+                                setColumnFilters((cf) => cf.filter((f) => f.id === 'status'));
                             setShowColFilters((v) => !v);
                         }}
                     >
                         Columns
-                        {columnFilters.length > 0 && <span className="n">{columnFilters.length}</span>}
+                        {colFiltersApplied.length > 0 && <span className="n">{colFiltersApplied.length}</span>}
                     </button>
 
                     {anyFilter && (

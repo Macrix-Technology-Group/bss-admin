@@ -9,7 +9,7 @@
  * opens a socket lives in db.ts.
  */
 
-export type InquiryStatus = 'new' | 'in_progress' | 'answered' | 'spam';
+export type InquiryStatus = 'new' | 'in_progress' | 'answered' | 'closed' | 'spam';
 
 export interface Inquiry {
     id: string;
@@ -47,6 +47,11 @@ export const STATUSES: { value: InquiryStatus; label: string }[] = [
     { value: 'new', label: 'New' },
     { value: 'in_progress', label: 'In progress' },
     { value: 'answered', label: 'Answered' },
+    /* Two end states outside the New→In progress→Answered pipeline: 'closed' is a finished inquiry
+       (no further action), 'spam' is junk. Adding 'closed' needs the status CHECK in db/schema.sql
+       to allow it — that file re-applies the constraint on every boot, so a deploy migrates the
+       live database with no hand-run step. */
+    { value: 'closed', label: 'Closed' },
     { value: 'spam', label: 'Spam' },
 ];
 

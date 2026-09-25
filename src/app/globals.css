@@ -39,6 +39,8 @@
     --progress-bg: #e7eefc;
     --answered: #077a55;
     --answered-bg: #e3f4ec;
+    --closed: #5b6472;
+    --closed-bg: #eef0f3;
     --spam: #d13b3a;
     --spam-bg: #fdecec;
 
@@ -562,8 +564,8 @@ tbody tr.detail:hover { background: transparent; }
 
 /* ── Status pill ──
    A lifecycle badge: a small track of three segments that fills as the inquiry advances
-   (New 1/3 → In progress 2/3 → Answered 3/3), then the label in the status colour. Spam sits
-   outside the pipeline, so it shows a ban icon instead of a track. Every pill is the same width so
+   (New 1/3 → In progress 2/3 → Answered 3/3), then the label in the status colour. Two states sit
+   outside the pipeline: Closed shows a solid bar, Spam a ban icon. Every pill is the same width so
    the column reads as one tidy stack. Each status sets --c, its hue. */
 .pill {
     --c: var(--text-dim);
@@ -584,16 +586,22 @@ tbody tr.detail:hover { background: transparent; }
 .pill[data-s='new']         { --c: var(--new); }
 .pill[data-s='in_progress'] { --c: var(--progress); }
 .pill[data-s='answered']    { --c: var(--answered); }
+.pill[data-s='closed']      { --c: var(--closed); }
 .pill[data-s='spam']        { --c: var(--spam); }
 
 .pillLabel { color: var(--c); }
 
 /* Lifecycle track. Filled segments take the status hue; the rest stay a faint rail, so the badge
    shows how far along the inquiry is at a glance. */
+/* Fixed to the width of three segments plus their gaps (3 × 12px + 2 × 3px = 42px) and centred, so
+   the solid bar and the ban icon land in the same slot as the track and the label never shifts. */
 .pillTrack {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
     gap: 3px;
     flex: none;
+    width: 42px;
 }
 .pillSeg {
     width: 12px;
@@ -603,9 +611,19 @@ tbody tr.detail:hover { background: transparent; }
 }
 .pillSeg[data-on='true'] { background: var(--c); }
 
-/* Spam has no stages, so one solid bar spans the same length as the three segments together
-   (3 × 12px + 2 × 3px gap = 42px) — the badge keeps its shape and the label stays put. */
+/* Closed has no stages, so one solid bar spans the whole 42px slot. */
 .pillSegFull { width: 42px; }
+
+/* Spam's ban mark — a circle with a diagonal line, in the status colour. */
+.pillIcon {
+    width: 16px;
+    height: 16px;
+    color: var(--c);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+}
 
 .subject {
     font-weight: 500;
@@ -1128,6 +1146,7 @@ tr.detail td { padding: 0; background: var(--surface-2); }
         --new: #e6a02f;      --new-bg: #3a2b14;
         --progress: #4589ee; --progress-bg: #1a2440;
         --answered: #2fbd67; --answered-bg: #113029;
+        --closed: #94a3b8;   --closed-bg: #232a33;
         --spam: #e64b45;     --spam-bg: #3a1c1c;
 
         --th-bg: #1b2027;
@@ -1160,6 +1179,7 @@ tr.detail td { padding: 0; background: var(--surface-2); }
     --new: #e6a02f;      --new-bg: #3a2b14;
     --progress: #4589ee; --progress-bg: #1a2440;
     --answered: #2fbd67; --answered-bg: #113029;
+    --closed: #94a3b8;   --closed-bg: #232a33;
     --spam: #e64b45;     --spam-bg: #3a1c1c;
 
     --th-bg: #1b2027;
