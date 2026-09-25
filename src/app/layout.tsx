@@ -9,11 +9,24 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-body', display: 'swa
 const outfit = Outfit({ subsets: ['latin'], variable: '--font-heading', display: 'swap' });
 
 export const metadata: Metadata = {
+    /* metadataBase makes the auto-generated link-preview image (opengraph-image.tsx) an absolute URL
+       so a chat or mail client can actually fetch it. Defaults to the desk's address on the network;
+       set ADMIN_PUBLIC_URL if it is reached at a different host. */
+    metadataBase: new URL(process.env.ADMIN_PUBLIC_URL || 'http://10.34.0.7:3100'),
     title: 'Inquiries — BSS LogisQ',
+    description: 'The BSS LogisQ inquiry desk — messages from the contact form on bss-logisq.com.',
     /* Internal tool holding customer data: tell every crawler to stay out and not to keep a copy.
        Belt and braces with the network boundary, not a replacement for it — this only stops
        well-behaved crawlers, and it is the network that stops everyone else. */
     robots: { index: false, follow: false, nocache: true },
+    /* The link-preview card. The image is supplied automatically by opengraph-image.tsx; this adds
+       the title and text that sit beside it. */
+    openGraph: {
+        title: 'Inquiries — BSS LogisQ',
+        description: 'The BSS LogisQ inquiry desk.',
+        siteName: 'BSS LogisQ',
+        type: 'website',
+    },
 };
 
 /* Applies a stored theme choice BEFORE the first paint.

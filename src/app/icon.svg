@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BSS LogisQ warehouse">
+  <rect width="64" height="64" rx="15" fill="#0f2942"/>
+  <!-- Warehouse: a wide, low building with a flat-topped roof and a big roll-up loading door with
+       shutter slats — the loading-bay cues that read as a warehouse, not a house. -->
+  <polygon points="5,29 18,17 46,17 59,29" fill="#3477c9"/>
+  <rect x="11" y="28" width="42" height="24" rx="2" fill="#53befc"/>
+  <rect x="21" y="35" width="22" height="17" rx="1.5" fill="#0f2942"/>
+  <line x1="21" y1="40" x2="43" y2="40" stroke="#53befc" stroke-width="1.6"/>
+  <line x1="21" y1="45" x2="43" y2="45" stroke="#53befc" stroke-width="1.6"/>
+</svg>
