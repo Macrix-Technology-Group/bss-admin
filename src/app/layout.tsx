@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, Outfit } from 'next/font/google';
 import './globals.css';
+import FaviconSync from './FaviconSync';
 
 /* The BSS brand faces, the same two the public site uses: Outfit for headings and the wordmark,
    Inter for everything read at length. Loaded through next/font so they are self-hosted and carry
@@ -47,7 +48,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <head>
                 <script dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
             </head>
-            <body>{children}</body>
+            <body>
+                <FaviconSync />
+                {children}
+            </body>
         </html>
     );
 }
